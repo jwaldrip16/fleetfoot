@@ -1,0 +1,24 @@
+{% extends "base.html" %}{% block body %}
+<div class="head"><h1>Restaurant hours</h1><a class="btn small" href="/dispatch">Back to board</a></div>
+{% if saved %}<p class="good">Hours saved.</p>{% endif %}
+{% for d in data %}
+<form class="panel" method="post">
+  <input type="hidden" name="restaurant_id" value="{{ d.r['id'] }}">
+  <h2>{{ d.r['name'] }} <span class="pill {{ 'green' if d.open else 'grey' }}">{{ 'Open' if d.open else 'Closed' }}</span></h2>
+  <p class="muted small">{{ d.r['address'] }}</p>
+  <table class="hours">
+    {% for i in range(7) %}
+    <tr><td>{{ week[i] }}</td>
+      <td><input type="time" name="open_{{ i }}" value="{{ d.hours[i|string][0] }}"></td>
+      <td><input type="time" name="close_{{ i }}" value="{{ d.hours[i|string][1] }}"></td></tr>
+    {% endfor %}
+  </table>
+  <label><input type="checkbox" name="closed_override" {{ 'checked' if d.r['closed_override'] }}>
+    Force closed (kitchen paused)</label>
+  <div class="row"><label>Default prep minutes</label>
+    <input type="number" name="prep_default" value="{{ d.r['prep_default'] }}" min="1" max="120"></div>
+  <div class="row"><label>Phone</label><input name="phone" value="{{ d.r['phone'] }}"></div>
+  <button class="btn primary">Save {{ d.r['name'] }}</button>
+</form>
+{% endfor %}
+{% endblock %}

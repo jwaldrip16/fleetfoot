@@ -1,0 +1,82 @@
+{% extends "base.html" %}{% block body %}
+<div class="head"><h1>{{ driver_name }}</h1>
+  <div><a class="btn small" href="/driver/new-order">Place an order for a customer</a>
+       <a class="btn small" href="/driver/logout">Sign out</a></div></div>
+<div class="panel" id="status"></div>
+<div class="cols">
+  <section><h2>Your run</h2><div id="stack"></div>
+    <h2>Queue</h2><div id="queue"></div></section>
+  <aside class="panel"><h2>Dispatch chat</h2>
+    <div id="chat" class="chat"></div>
+    <div class="row"><input id="chatBox" placeholder="Ask dispatch to put you online or on break"
+        onkeydown="if(event.key==='Enter')send()"><button class="btn" onclick="send()">Send</button></div>
+    <p class="muted small">Only dispatch can change your status. Tap a request and they get it in chat.</p>
+  </aside>
+</div>
+{% endblock %}
+{% block scripts %}<script>
+const DID = {{ driver_id }};
+async function state(){
+  const res = await jget('/api/driver/state');
+  if(!res.ok){ window.location='/driver/login'; return; }
+  const d = res.driver;
+  document.getElementById('status').innerHTML =
+    '<div class="row"><div>Status <span class="pill '+
+    (d.status==='online'?'green':d.status==='break'?'amber':'grey')+'">'+d.status+'</span>'+
+    (d.pending_request ? ' <span class="pill amber">requested: '+d.pending_request+', waiting on dispatch</span>' : '')+
+    '<div class="muted small">Stacking up to '+d.max_stack+' orders.</div></div>'+
+    '<div><button class="btn tiny" onclick="ask(\'online\')">Request online</button>'+
+    '<button class="btn tiny" onclick="ask(\'break\')">Request break</button>'+
+    '<button class="btn tiny" onclick="ask(\'offline\')">Request clock out</button></div></div>';
+  document.getElementById('stack').innerHTML = res.stack.map(o=>
+    '<div class="order"><div class="order-head"><strong>Stop #'+o.stack_seq+' &middot; '+o.code+'</strong> '+
+    '<span class="pill '+(o.kitchen_status==='ready'?'green':'amber')+'">'+o.kitchen_status+'</span> '+
+    '<span class="pill blue">'+o.dispatch_status.replace('_',' ')+'</span></div>'+
+    '<div class="muted small">'+o.restaurant+' &middot; '+o.restaurant_address+'</div>'+
+    '<div class="muted small">'+o.customer+' &middot; '+o.phone+' &middot; '+o.address+
+    (o.note?' &middot; '+o.note:'')+'</div>'+
+    '<div class="muted small">'+o.items.map(i=>i.qty+'x '+i.name).join(', ')+' &middot; total '+o.total+'</div>'+
+    '<div class="order-actions">'+
+    '<a class="btn tiny" target="_blank" href="'+o.restaurant_nav+'">Navigate to restaurant</a>'+
+    '<a class="btn tiny" target="_blank" href="'+o.customer_nav+'">Navigate to customer</a>'+
+    stageButtons(o)+'</div></div>'
+  ).join('') || '<p class="muted">Nothing assigned to you right now.</p>';
+  document.getElementById('queue').innerHTML = res.queue.map(o=>
+    '<div class="row"><span>#'+o.queue_position+' '+o.code+' &middot; '+o.restaurant+' &middot; '+
+    o.miles+' mi</span><span class="pill '+(o.dispatch_status==='held'?'grey':'blue')+'">'+
+    o.dispatch_status+(o.hold_reason?': '+o.hold_reason:'')+'</span></div>'
+  ).join('') || '<p class="muted">Queue is clear.</p>';
+}
+function stageButtons(o){
+  const s = o.dispatch_status;
+  const b = (st,label,on)=>'<button class="btn tiny'+(on?' primary-outline':'')+
+      '" onclick="stage('+o.id+',\''+st+'\',\''+o.code+'\')">'+label+'</button>';
+  return b('received','Received', s==='received') + b('at_restaurant','At restaurant', s==='at_restaurant') +
+         b('enroute','Enroute', s==='enroute') + b('delivered','Complete', false);
+}
+async function stage(id, st, code){
+  if (st === 'delivered'){
+    const ok = confirm('Heads up: marking ' + code + ' complete closes the order.\n\n' +
+      'Only do this once the food is in the customer hands. It moves to completed orders, ' +
+      'frees your slot for the next stop, and you cannot undo it from the app. Dispatch would ' +
+      'have to reopen it.\n\nMark ' + code + ' complete?');
+    if(!ok) return;
+  }
+  await jpost('/api/order/status', {order_id:id, dispatch_status:st});
+  state();
+}
+async function ask(st){ await jpost('/api/driver/request', {status:st}); state(); chat(); }
+async function dstat(id, st){ await jpost('/api/order/status', {order_id:id, dispatch_status:st}); state(); }
+async function chat(){
+  const res = await jget('/api/chat/'+DID);
+  document.getElementById('chat').innerHTML = res.messages.map(m=>
+    '<div class="msg '+m.sender+'"><span class="muted small">'+m.at+' '+m.sender+'</span><div>'+m.body+'</div></div>'
+  ).join('');
+  const c=document.getElementById('chat'); c.scrollTop=c.scrollHeight;
+}
+async function send(){
+  const b=document.getElementById('chatBox'); if(!b.value.trim()) return;
+  await jpost('/api/chat/'+DID, {sender:'driver', body:b.value}); b.value=''; chat(); state();
+}
+state(); chat(); setInterval(state,4000); setInterval(chat,4000);
+</script>{% endblock %}

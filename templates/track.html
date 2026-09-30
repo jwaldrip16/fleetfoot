@@ -1,0 +1,36 @@
+{% extends "base.html" %}{% block body %}
+{% if not order %}
+<h1>Order {{ code }}</h1><p>We could not find that order code.</p>
+{% else %}
+<h1>Order {{ order.code }}</h1>
+<div class="panel" id="live"></div>
+{% endif %}
+{% endblock %}
+{% block scripts %}{% if order %}<script>
+const CODE = '{{ order.code }}';
+async function tick(){
+  const res = await jget('/api/track/'+CODE);
+  if(!res.ok) return;
+  const o = res.order;
+  const steps = [['Sent to kitchen', o.kitchen_status!=='pending'],
+                 ['Being prepared', o.kitchen_status==='preparing'||o.kitchen_status==='ready'],
+                 ['Ready for pickup', o.kitchen_status==='ready'],
+                 ['With a driver', ['assigned','picked_up','delivered'].includes(o.dispatch_status)],
+                 ['Delivered', o.dispatch_status==='delivered']];
+  let html = '<h2>'+o.restaurant+'</h2><p class="muted">'+o.address+'</p>';
+  html += '<ul class="steps">'+steps.map(s=>'<li class="'+(s[1]?'done':'')+'">'+s[0]+'</li>').join('')+'</ul>';
+  if (o.timer_seconds !== null && o.kitchen_status==='preparing')
+    html += '<p class="big">Kitchen timer: '+Math.max(0,Math.ceil(o.timer_seconds/60))+' min left</p>';
+  if (o.queue_position)
+    html += '<p class="big">Position in the delivery queue: #'+o.queue_position+
+            (o.hold_reason ? ' <span class="muted">('+o.hold_reason+')</span>' : '')+'</p>';
+  if (o.driver) html += '<p class="big">Driver: '+o.driver+' (stop #'+o.stack_seq+' on their run)</p>';
+  html += '<div class="row"><span>Subtotal</span><span>'+o.subtotal+'</span></div>'+
+          '<div class="row"><span>Delivery ('+o.miles+' mi)</span><span>'+o.fee+'</span></div>'+
+          '<div class="row"><span>Tax</span><span>'+o.tax+'</span></div>'+
+          '<div class="row total"><span>Total</span><span>'+o.total+'</span></div>'+
+          '<p><a class="btn" target="_blank" href="'+o.restaurant_nav+'">Navigate to the restaurant</a></p>';
+  document.getElementById('live').innerHTML = html;
+}
+tick(); setInterval(tick, 4000);
+</script>{% endif %}{% endblock %}

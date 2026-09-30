@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}FleetFoot Delivery{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head><body class="{% block bodyclass %}{% endblock %}">
+<header class="topbar">
+  <a class="brand" href="/">FleetFoot</a>
+  <nav>
+    <a href="/">Order food</a>
+    <a href="/dispatch">Dispatch</a>
+    <a href="/driver">Driver</a>
+    <a href="/restaurant">Restaurant</a>
+  </nav>
+</header>
+<main>{% block body %}{% endblock %}</main>
+<script>
+async function jpost(url, data){
+  const r = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'},
+                             body: JSON.stringify(data||{})});
+  return r.json();
+}
+async function jget(url){ const r = await fetch(url); return r.json(); }
+function money(c){ return '$' + (c/100).toFixed(2); }
+</script>
+{% block scripts %}{% endblock %}
+</body></html>

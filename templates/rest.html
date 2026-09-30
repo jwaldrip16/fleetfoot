@@ -1,0 +1,37 @@
+{% extends "base.html" %}{% block body %}
+<div class="head"><h1>{{ r['name'] }}</h1>
+  <div><span class="pill {{ 'green' if open else 'grey' }}" id="openpill">{{ 'Open' if open else 'Closed' }}</span>
+  <button class="btn small" onclick="toggle()">Pause / resume orders</button>
+  <a class="btn small" href="/restaurant/logout">Sign out</a></div></div>
+<p class="muted">{{ hours }}</p>
+<div id="orders"></div>
+{% endblock %}
+{% block scripts %}<script>
+async function load(){
+  const res = await jget('/api/restaurant/orders');
+  if(!res.ok){ window.location='/restaurant/login'; return; }
+  document.getElementById('openpill').textContent = res.open ? 'Open' : 'Closed';
+  document.getElementById('orders').innerHTML = res.orders.map(o=>{
+    const t = (o.timer_seconds!==null && o.kitchen_status==='preparing')
+      ? '<span class="pill amber">'+Math.max(0,Math.ceil(o.timer_seconds/60))+' min left</span>' : '';
+    return '<div class="order"><div class="order-head"><strong>'+o.code+'</strong> '+
+      '<span class="pill '+(o.kitchen_status==='ready'?'green':o.kitchen_status==='preparing'?'amber':'red')+
+      '">'+o.kitchen_status+'</span> '+t+
+      (o.driver?' <span class="pill blue">driver '+o.driver+'</span>':
+       o.queue_position?' <span class="pill grey">queue #'+o.queue_position+'</span>':'')+'</div>'+
+      '<div class="muted small">'+o.customer+' &middot; '+o.phone+' &middot; '+o.address+'</div>'+
+      '<ul class="items">'+o.items.map(i=>'<li>'+i.qty+'x '+i.name+'</li>').join('')+'</ul>'+
+      '<div class="order-actions">Timer <input class="mins" id="m'+o.id+'" type="number" value="'+
+      (o.prep_minutes||res.prep_default)+'" min="1" max="90"> min '+
+      '<button class="btn tiny" onclick="start('+o.id+')">Accept and start timer</button>'+
+      '<button class="btn tiny" onclick="ready('+o.id+')">Mark ready</button></div></div>';
+  }).join('') || '<p class="muted">No open orders.</p>';
+}
+async function start(id){
+  await jpost('/api/order/status', {order_id:id, kitchen_status:'preparing',
+              prep_minutes:document.getElementById('m'+id).value}); load();
+}
+async function ready(id){ await jpost('/api/order/status', {order_id:id, kitchen_status:'ready'}); load(); }
+async function toggle(){ await jpost('/api/restaurant/toggle', {}); load(); }
+load(); setInterval(load, 4000);
+</script>{% endblock %}

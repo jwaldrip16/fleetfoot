@@ -1,0 +1,51 @@
+{% extends "base.html" %}{% block body %}
+<div class="head"><h1>Place an order for a customer</h1><a class="btn small" href="/driver">Back</a></div>
+<div class="panel narrow">
+  <label>Restaurant</label>
+  <select id="rid" onchange="drawMenu()">
+    {% for r in restaurants %}<option value="{{ r['id'] }}">{{ r['name'] }}</option>{% endfor %}
+  </select>
+  <div id="menu"></div>
+  <div id="cart"></div>
+  <input id="name" placeholder="Customer name">
+  <input id="phone" placeholder="Customer phone">
+  <textarea id="address" rows="2" placeholder="Street, city, state, ZIP"></textarea>
+  <input id="note" placeholder="Delivery notes">
+  <button class="btn" onclick="validate()">Validate address and price delivery</button>
+  <div id="quote" class="quote"></div>
+  <button class="btn primary" onclick="place()">Submit order to the kitchen</button>
+</div>
+{% endblock %}
+{% block scripts %}<script>
+const MENU = {{ menu_map | tojson }};
+let cart = [], geo = null;
+function drawMenu(){
+  const rid = document.getElementById('rid').value;
+  document.getElementById('menu').innerHTML = (MENU[rid]||[]).map(i=>
+    '<div class="row"><span>'+i.name+' '+money(i.price_cents)+'</span>'+
+    '<button class="btn tiny" onclick="add('+i.id+',\''+i.name+'\','+i.price_cents+')">Add</button></div>').join('');
+}
+function add(id,name,price){
+  const f=cart.find(c=>c.id===id); if(f) f.qty++; else cart.push({id:id,name:name,price_cents:price,qty:1});
+  document.getElementById('cart').innerHTML = '<p><strong>Cart:</strong> '+
+    cart.map(c=>c.qty+'x '+c.name).join(', ')+'</p>';
+}
+async function validate(){
+  const res = await jpost('/api/quote', {restaurant_id: +document.getElementById('rid').value,
+                                         address: document.getElementById('address').value});
+  const q = document.getElementById('quote');
+  if(!res.ok){ geo=null; q.className='quote bad'; q.textContent=res.error; return; }
+  geo=res; q.className='quote good';
+  q.innerHTML = 'Verified: '+res.formatted+'<br>'+res.miles+' miles, delivery '+res.fee;
+}
+async function place(){
+  if(!geo){ alert('Validate the address first.'); return; }
+  const res = await jpost('/checkout', {restaurant_id:+document.getElementById('rid').value,
+    customer_name:document.getElementById('name').value, customer_phone:document.getElementById('phone').value,
+    address:document.getElementById('address').value, note:document.getElementById('note').value,
+    items:cart, placed_by:'driver'});
+  if(!res.ok){ alert(res.error); return; }
+  window.location = '/track/'+res.code;
+}
+drawMenu();
+</script>{% endblock %}
